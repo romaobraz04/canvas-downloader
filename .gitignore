@@ -1,0 +1,25 @@
+# Secrets
+.env
+
+# Downloaded course files
+downloads/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Virtual environments (if you create one later)
+venv/
+.env/
+.venv/
+
+# VSCode workspace settings (optional but recommended)
+.vscode/
+
+# OS-specific junk files
+.DS_Store
+Thumbs.db
+
+test.ipynb
+
+download_canvas_modules.py
