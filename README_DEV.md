@@ -1,204 +1,174 @@
 # Canvas Downloader — Developer Documentation
 
-This document explains architecture, project structure, faculty-specific logic, and how to contribute.
+This document describes the architecture, package structure, and development workflow.
 
-For end users, see `README.md`.
+⚠️ **Note:**  
+The package is **not yet published on PyPI**.  
+During development, it is installed locally using:
+
+```
+pip install -e .
+```
+
+Once the package is stable, a PyPI release will be prepared.
 
 ---
 
 # 1. Overview
 
-Canvas Downloader is a Python package that retrieves module files from the Canvas LMS REST API.
+Canvas Downloader retrieves module files from courses in the Canvas LMS.
 
 Features include:
 
-- Module + file retrieval  
-- “Update only” incremental mode  
-- Optional block/period grouping (ESE only)  
-- Skipping entire blocks  
-- Whitelisting specific courses  
-- Excluding specific courses  
-- Fully pip-installable package structure  
+- Course and module discovery
+- File downloading + incremental mode
+- Optional ESE-period grouping
+- Skip entire blocks (DISABLE_BLOCKS)
+- Whitelist mode (ONLY_COURSES)
+- Exclusion lists
+- `.env` configuration
 
-The package is designed to support future expansion (e.g., GUI wizard, faculty presets).
+Designed to later support a GUI and PyPI release.
 
 ---
 
-# 2. Repository Structure
+# 2. Local Installation (development)
+
+Clone the repository:
 
 ```
-canvas-downloader/              ← Repo root
-├── main.py                     ← Simple CLI entry point
-├── README.md                   ← User-friendly guide
-├── README_DEV.md               ← Developer documentation
+git clone https://github.com/yourusername/canvas-downloader.git
+```
+
+Install in editable mode:
+
+```
+pip install -e .
+```
+
+Run the package:
+
+```
+python -m canvas_downloader
+```
+
+---
+
+# 3. Package Structure
+
+```
+canvas-downloader/
+├── main.py
+├── README.md
+├── README_DEV.md
 ├── .gitignore
 ├── .env.example
-└── canvas_downloader/          ← Python package
-    ├── __init__.py             ← Exports sync() & load_config()
-    ├── __main__.py             ← Allows `python -m canvas_downloader`
-    ├── config.py               ← Env loader and feature flags
-    ├── canvas_api.py           ← REST API + pagination
-    └── downloader.py           ← Main sync logic
+└── canvas_downloader/
+    ├── __init__.py
+    ├── __main__.py
+    ├── config.py
+    ├── canvas_api.py
+    └── downloader.py
 ```
 
-This is a valid PyPI package structure.
+This matches the structure needed for a future PyPI release.
 
 ---
 
-# 3. Configuration System
+# 4. Configuration System
 
-Configuration is handled via `.env` using `python-dotenv`.
+Configuration is stored in `.env`, loaded by `config.py`.
 
-### Environment variables:
+### Key environment variables
 
 | Variable | Purpose |
 |---------|---------|
-| `CANVAS_BASE_URL` | Canvas instance base URL |
+| `CANVAS_BASE_URL` | Canvas instance URL |
 | `CANVAS_ACCESS_TOKEN` | API token |
-| `DOWNLOAD_ROOT` | Where downloads go |
-| `FACULTY` | Enables faculty-specific features (`ESE` only for now) |
-| `GROUP_BY_BLOCKS` | Toggle block/period grouping (ESE only) |
+| `DOWNLOAD_ROOT` | Folder for files |
+| `FACULTY` | Enables faculty-specific logic (`ESE`) |
+| `GROUP_BY_BLOCKS` | Enable BLOK grouping |
 | `DISABLE_BLOCKS` | Skip entire blocks |
-| `UPDATE_ONLY` | Skip existing files during sync |
-| `BLOK*` | User-provided ESE block → course mappings |
-| `EXCLUDED` | Skip specific courses entirely |
-| `ONLY_COURSES` | Whitelist mode (download only these courses) |
+| `UPDATE_ONLY` | Skip existing files |
+| `BLOK*` | Block → course mappings |
+| `EXCLUDED` | Skip courses |
+| `ONLY_COURSES` | Only process selected courses |
 
 ---
 
-# 4. ESE-Specific Period Logic (BLOK System)
+# 5. BLOK System (ESE Students Only)
 
-Only **Erasmus School of Economics** uses the “BLOK1/BLOK2…” structure.  
-Canvas does **not** provide period metadata, so user-supplied mapping is required.
-
-### BLOK mode activates **only when**:
+Only used when:
 
 ```
 FACULTY=ESE
 GROUP_BY_BLOCKS=true
 ```
 
-Otherwise:
+Because Canvas does not expose periods in its API, the user must manually map course identifiers to blocks:
 
 ```
-DOWNLOAD_ROOT/CourseName/ModuleName/...
+BLOK1=FEB22002X|2025
+BLOK2=FEB22008X|2025
 ```
 
-is used, with no block grouping.
-
-### Disabling entire blocks
+### Block disabling
 
 Users can skip entire blocks:
 
 ```
-DISABLE_BLOCKS=BLOK1, BLOK3
+DISABLE_BLOCKS=BLOK1
 ```
 
-Implementation:
+### Behavior order
 
-1. Course’s block is resolved by `guess_block_for_course()`
-2. If its block is in `DISABLE_BLOCKS`, the course is skipped early
-
-### Why keep this architecture?
-
-- It does not assume a universal block system  
-- It allows adding presets for other faculties later (RSM BTBa/b, ESHCC trimesters)  
-- It remains fully generic for all universities
+1. Skip `EXCLUDED`  
+2. Apply `ONLY_COURSES`  
+3. Detect course block  
+4. Skip block if in `DISABLE_BLOCKS`  
+5. Continue processing  
 
 ---
 
-# 5. Course Matching Logic
+# 6. Download Logic
 
-The script identifies courses using:
+`sync()` performs:
 
-- `course_code`
-- `sis_course_id`
+1. Load config  
+2. Fetch active courses (`/api/v1/courses`)  
+3. Filter exclusions/whitelist/disabled blocks  
+4. Fetch modules (`/api/v1/courses/:id/modules`)  
+5. Fetch module items  
+6. Download file items  
+7. Skip existing files if `UPDATE_ONLY=true`  
 
-whichever the user prefers.
-
-### Whitelisting (ONLY_COURSES)
-
-If `ONLY_COURSES` is set, **only** those courses are processed.
-
-### Exclusion (EXCLUDED)
-
-If a course matches either identifier, it is skipped.
-
-### Block disabling
-
-If course’s block ∈ `DISABLE_BLOCKS`, it is skipped.
+Pagination handled by `canvas_api.py`.
 
 ---
 
-# 6. Download Pipeline
+# 7. Project Goals
 
-### `sync_all_courses()` overview:
+Future work includes:
 
-1. Load config and `.env`  
-2. Fetch active courses  
-3. Log course identifiers  
-4. Apply (in order):
-
-   - `EXCLUDED`
-   - `ONLY_COURSES`
-   - `DISABLE_BLOCKS`
-   - faculty-specific BLOK logic
-
-5. Fetch modules  
-6. Fetch module items  
-7. Download file items  
-8. Skip existing files if `UPDATE_ONLY=true`  
-9. Write output under `DOWNLOAD_ROOT`  
-
-Pagination is handled centrally in `canvas_api.py`.
-
----
-
-# 7. Public API
-
-```python
-from canvas_downloader import sync, load_config
-```
-
-### Functions:
-
-- `sync(update_only=None)`  
-- `load_config()`  
-
-CLI Entrypoints:
-
-```bash
-python main.py
-python -m canvas_downloader
-```
-
----
-
-# 8. Future Development
-
-Planned:
-
+- PyPI release  
 - GUI setup wizard  
-- Directory picker for DOWNLOAD_ROOT  
-- Course/block manager  
-- Period presets for other faculties  
-- PyPI release automation  
+- Faculty presets (RSM BTBa/b, ESHCC trimesters)  
+- Auto-detection for block structures  
 - Progress bar UI  
-- More robust error recovery and retry  
+- Logging refinements  
 
 ---
 
-# 9. Contribution Guidelines
+# 8. Contributing
 
 1. Fork the repository  
-2. Install dependencies  
-3. Run the CLI locally via `python main.py`  
+2. Install locally (`pip install -e .`)  
+3. Add new features with small, modular code changes  
 4. Follow PEP8 + type hints  
-5. Keep code modular (no giant functions)  
-6. Submit PRs with clear description  
+5. Submit PRs with clear descriptions  
 
 ---
 
-# 10. License
+# 9. License
 
-MIT (or chosen license)
+MIT (or to be chosen by repository owner)
