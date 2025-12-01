@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import unicodedata
 import os
 import re
 import time
@@ -19,11 +20,39 @@ logger = logging.getLogger(__name__)
 def safe_name(name: str) -> str:
     """
     Make a string safe to use as a folder/file name on Windows.
+
+    - Removes forbidden path characters
+    - Strips control characters and emoji/other symbols
+    - Trims whitespace
+    - Avoids trailing dots/spaces which Windows hates
     """
     if not name:
         return "untitled"
-    bad_chars = r'<>:"/\\|?*'
-    cleaned = "".join(c for c in name if c not in bad_chars).strip()
+
+    bad_chars = '<>:"/\\|?*'
+    cleaned_chars = []
+
+    for c in name:
+        if c in bad_chars:
+            continue
+
+        cat = unicodedata.category(c)
+
+        # Control characters (Cc, Cf, etc.)
+        if cat.startswith("C"):
+            continue
+
+        # Other symbols (So) – where most emoji live
+        if cat.startswith("So"):
+            continue
+
+        cleaned_chars.append(c)
+
+    cleaned = "".join(cleaned_chars).strip()
+
+    # Windows hates names ending with dot or space
+    cleaned = cleaned.rstrip(". ")
+
     return cleaned or "untitled"
 
 
@@ -53,8 +82,10 @@ def guess_block_for_course(course: Dict[str, Any]) -> Optional[str]:
 def download_file(file_info: Dict[str, Any], dest_path: str, update_only: bool = True) -> None:
     """
     Download a file from Canvas given its metadata.
-    If update_only=True and file already exists, it is skipped.
-    If update_only=False, file is always re-downloaded and overwritten.
+
+    - Ensures the parent directory exists
+    - If update_only=True and the file already exists, skip it
+    - Otherwise downloads and writes the file
     """
     download_url = file_info.get("url") or file_info.get("download_url")
     if not download_url:
@@ -65,22 +96,33 @@ def download_file(file_info: Dict[str, Any], dest_path: str, update_only: bool =
         )
         return
 
-    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    dir_path = os.path.dirname(dest_path)
 
-    if update_only and os.path.exists(dest_path):
+    try:
+        os.makedirs(dir_path, exist_ok=True)
+    except OSError as e:
+        logger.error("Could not create directory %s: %s", dir_path, e)
+        return
+
+    if update_only and os.path.isfile(dest_path):
         logger.info("Exists, skipping: %s", dest_path)
         return
 
     logger.info("Downloading: %s", dest_path)
-    headers = {"Authorization": f"Bearer {config.CANVAS_ACCESS_TOKEN}"}
-    with requests.get(download_url, headers=headers, stream=True) as r:
-        r.raise_for_status()
-        with open(dest_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
+    headers = {"Authorization": f"Bearer %s" % config.CANVAS_ACCESS_TOKEN}
 
-    time.sleep(0.1)  # be kind to the server
+    try:
+        with requests.get(download_url, headers=headers, stream=True) as r:
+            r.raise_for_status()
+            with open(dest_path, "xb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+    except FileNotFoundError as e:
+        logger.error("FileNotFoundError writing %s: %s", dest_path, e)
+        return
+
+    time.sleep(0)  # be kind to the server
 
 
 def sync_all_courses(update_only: bool = True) -> None:
@@ -156,6 +198,9 @@ def sync_all_courses(update_only: bool = True) -> None:
             module_name = safe_name(module_name_raw)
             module_root = os.path.join(course_root, module_name)
             logger.info("  Module: %s", module_name_raw)
+
+            # Make sure the directory for this module exists
+            os.makedirs(module_root, exist_ok=True)
 
             # Fetch module items
             items = canvas_get(
