@@ -5,6 +5,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -34,3 +37,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: canvas-downloader-windows.zip
+          generate_release_notes: true

@@ -3,7 +3,7 @@
 Download files from your Canvas courses into organized folders. Includes a GUI setup flow with screenshots and ESE-specific block grouping.
 
 **Download (Windows)**
-Get the latest `canvas-downloader-windows.zip` from the GitHub Releases page for this repo.
+Download the latest release here: [Latest Windows Release](https://github.com/romaobraz04/canvas-downloader/releases/latest)
 
 **For non-technical users (recommended)**
 1. Go to the GitHub Releases page for this repo.
