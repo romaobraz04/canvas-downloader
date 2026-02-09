@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import threading
+import traceback
 from pathlib import Path
 from typing import Dict, Iterable, List
 
@@ -92,9 +93,37 @@ def _find_block_numbers(values: Dict[str, str]) -> List[int]:
         match = re.match(r"^BLOK(\d+)$", key.strip().upper())
         if match:
             numbers.append(int(match.group(1)))
+    default = {1, 2, 3, 4, 5}
     if numbers:
-        return sorted(set(numbers))
-    return [1, 2, 3, 4, 5]
+        return sorted(set(numbers) | default)
+    return sorted(default)
+
+
+def _show_fatal_error(message: str) -> None:
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("Canvas Downloader Error", message)
+        root.destroy()
+    except Exception:
+        print(message, file=sys.stderr)
+
+
+def _write_fatal_log(exc: Exception) -> None:
+    try:
+        log_path = PROJECT_ROOT / "canvas_downloader_error.log"
+        log_path.write_text(traceback.format_exc(), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _toggle_section(button: ttk.Button, body: ttk.Frame) -> None:
+    if body.winfo_ismapped():
+        body.pack_forget()
+        button.configure(text="> Show")
+    else:
+        body.pack(fill="x", padx=12, pady=(0, 12))
+        button.configure(text="v Hide")
 
 
 class _TextHandler(logging.Handler):
@@ -116,6 +145,18 @@ class _TextHandler(logging.Handler):
 
 
 def run_ui() -> None:
+    try:
+        _run_ui()
+    except Exception as exc:  # pragma: no cover - fatal startup errors
+        _write_fatal_log(exc)
+        _show_fatal_error(
+            "The app ran into a problem and had to close.\n\n"
+            "A log file was written next to the app:\n"
+            "canvas_downloader_error.log"
+        )
+
+
+def _run_ui() -> None:
     env_values = _read_env_values()
     block_numbers = _find_block_numbers(env_values)
 
@@ -175,31 +216,39 @@ def run_ui() -> None:
         scrollable, text="How to Create a Canvas Access Token"
     )
     tutorial_frame.pack(fill="x", padx=16, pady=(0, 16))
+    tutorial_toggle = ttk.Button(
+        tutorial_frame,
+        text="v Hide",
+        command=lambda: _toggle_section(tutorial_toggle, tutorial_body),
+    )
+    tutorial_toggle.pack(anchor="e", padx=12, pady=(8, 0))
+    tutorial_body = ttk.Frame(tutorial_frame)
+    tutorial_body.pack(fill="x", padx=12, pady=(0, 12))
     tutorial_text = (
         "In Canvas, go to 'Account' -> 'Approved integrations' -> hit 'New access token' -> "
         "write a purpose (e.g. download course files automatically) -> pick an expiration date "
         "(max is 120 days from now; you will have to regenerate a token when that day comes)."
     )
-    ttk.Label(tutorial_frame, text=tutorial_text, wraplength=880, justify="left").pack(
-        anchor="w", padx=12, pady=(8, 12)
+    ttk.Label(tutorial_body, text=tutorial_text, wraplength=880, justify="left").pack(
+        anchor="w", pady=(8, 12)
     )
 
     image_refs: List[tk.PhotoImage] = []
 
-    def _add_image(filename: str, caption: str, parent: ttk.LabelFrame | None = None) -> None:
+    def _add_image(filename: str, caption: str, parent: tk.Misc | None = None) -> None:
         if parent is None:
-            parent = tutorial_frame
+            parent = tutorial_body
         path = ASSETS_DIR / filename
         if not path.exists():
             ttk.Label(parent, text=f"[Missing image: {filename}]").pack(
-                anchor="w", padx=12, pady=4
+                anchor="w", pady=4
             )
             return
         try:
             img = tk.PhotoImage(file=str(path))
         except tk.TclError:
             ttk.Label(parent, text=f"[Could not load image: {filename}]").pack(
-                anchor="w", padx=12, pady=4
+                anchor="w", pady=4
             )
             return
 
@@ -211,9 +260,9 @@ def run_ui() -> None:
         label = ttk.Label(parent, image=img)
         label.image = img
         image_refs.append(img)
-        label.pack(anchor="w", padx=12, pady=(0, 4))
+        label.pack(anchor="w", pady=(0, 4))
         ttk.Label(parent, text=caption, font=("Segoe UI", 9)).pack(
-            anchor="w", padx=12, pady=(0, 12)
+            anchor="w", pady=(0, 12)
         )
 
     _add_image("approved_integrations.png", "Approved integrations menu")
@@ -262,13 +311,21 @@ def run_ui() -> None:
 
     course_code_frame = ttk.LabelFrame(scrollable, text="What Is a Course Code?")
     course_code_frame.pack(fill="x", padx=16, pady=(0, 16))
-    ttk.Label(
+    course_toggle = ttk.Button(
         course_code_frame,
+        text="v Hide",
+        command=lambda: _toggle_section(course_toggle, course_body),
+    )
+    course_toggle.pack(anchor="e", padx=12, pady=(8, 0))
+    course_body = ttk.Frame(course_code_frame)
+    course_body.pack(fill="x", padx=12, pady=(0, 12))
+    ttk.Label(
+        course_body,
         text="Use course codes (e.g. FEB22009) for Only/Exclude/BLOK settings.",
         wraplength=880,
         justify="left",
-    ).pack(anchor="w", padx=12, pady=(8, 6))
-    _add_image("course.png", "Course code example shown in Canvas", parent=course_code_frame)
+    ).pack(anchor="w", pady=(8, 6))
+    _add_image("course.png", "Course code example shown in Canvas", parent=course_body)
 
     options_frame = ttk.LabelFrame(scrollable, text="Download Options")
     options_frame.pack(fill="x", padx=16, pady=(0, 16))

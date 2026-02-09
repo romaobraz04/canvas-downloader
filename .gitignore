@@ -19,6 +19,7 @@ dist/
 build/
 *.spec
 canvas-downloader-windows.zip
+canvas_downloader_error.log
 
 # VSCode workspace settings (optional but recommended)
 .vscode/
