@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
 import threading
 from pathlib import Path
 from typing import Dict, Iterable, List
@@ -18,10 +19,24 @@ except Exception:  # pragma: no cover - fallback if dotenv is unavailable
 
 
 CANVAS_BASE_URL = "https://canvas.eur.nl/"
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _app_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+def _assets_root() -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "canvas_downloader" / "assets"
+    return Path(__file__).resolve().parent / "assets"
+
+
+PROJECT_ROOT = _app_root()
 ENV_PATH = PROJECT_ROOT / ".env"
 ENV_EXAMPLE_PATH = PROJECT_ROOT / ".env.example"
-ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+ASSETS_DIR = _assets_root()
 
 
 def _read_env_values() -> Dict[str, str]:
@@ -455,9 +470,28 @@ def run_ui() -> None:
 
                 sync(update_only=update_only_var.get())
                 root.after(0, lambda: status_var.set("Download complete."))
-            except (
-                Exception
-            ) as exc:  # pragma: no cover - runtime errors displayed in UI
+            except RuntimeError as exc:  # pragma: no cover - runtime errors displayed in UI
+                message = str(exc)
+                if "Set CANVAS_BASE_URL and CANVAS_ACCESS_TOKEN" in message:
+                    root.after(
+                        0,
+                        lambda: messagebox.showerror(
+                            "Missing Canvas Settings",
+                            "Please enter your Canvas access token and save settings before downloading.",
+                        ),
+                    )
+                    root.after(
+                        0, lambda: status_var.set("Missing settings. Please save first.")
+                    )
+                else:
+                    logging.exception("Download failed: %s", exc)
+                    root.after(
+                        0,
+                        lambda: status_var.set(
+                            "Download failed. See log for details."
+                        ),
+                    )
+            except Exception as exc:  # pragma: no cover - runtime errors displayed in UI
                 logging.exception("Download failed: %s", exc)
                 root.after(
                     0, lambda: status_var.set("Download failed. See log for details.")

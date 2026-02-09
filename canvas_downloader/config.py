@@ -2,11 +2,22 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 from typing import Dict, Set
 
 from dotenv import load_dotenv
 
-load_dotenv()
+
+def _app_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+APP_ROOT = _app_root()
+
+load_dotenv(dotenv_path=APP_ROOT / ".env")
 
 CANVAS_BASE_URL: str = (os.getenv("CANVAS_BASE_URL") or "").rstrip("/")
 CANVAS_ACCESS_TOKEN: str | None = os.getenv("CANVAS_ACCESS_TOKEN")

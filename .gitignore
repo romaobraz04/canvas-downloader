@@ -14,6 +14,12 @@ venv/
 .venv/
 .venv-student/
 
+# Build artifacts
+dist/
+build/
+*.spec
+canvas-downloader-windows.zip
+
 # VSCode workspace settings (optional but recommended)
 .vscode/
 
