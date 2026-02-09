@@ -1,10 +1,30 @@
 # main.py
 from __future__ import annotations
 
+import argparse
 import logging
 
-from canvas_downloader import sync
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Canvas Downloader")
+    parser.add_argument(
+        "--cli",
+        action="store_true",
+        help="Run the downloader in CLI mode (no GUI).",
+    )
+    args = parser.parse_args()
+
+    if args.cli:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+        from canvas_downloader import sync
+
+        sync()
+        return
+
+    from canvas_downloader.ui import run_ui
+
+    run_ui()
+
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    sync()
+    main()

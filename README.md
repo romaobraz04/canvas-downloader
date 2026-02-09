@@ -1,163 +1,89 @@
 # Canvas Course File Downloader
 
-A simple tool that downloads course files from your Canvas LMS account and saves them into organized folders.  
-Works for any university that uses Canvas.
+Download files from your Canvas courses into organized folders. Includes a GUI setup flow with screenshots and ESE-specific block grouping.
 
-⚠️ **Note:**  
-This tool is **not yet published on PyPI**.  
-During development, you install it **locally** following the instructions below.
+**Download (Windows)**
+Get the latest `canvas-downloader-windows.zip` from the GitHub Releases page for this repo.
 
-A future version will support:
+**For non-technical users (recommended)**
+1. Go to the GitHub Releases page for this repo.
+2. Download `canvas-downloader-windows.zip`.
+3. Unzip it anywhere (e.g. Downloads).
+4. Double-click `canvas-downloader.exe`.
+5. Follow the on-screen setup wizard.
 
+**Quick Start (source)**
+1. Clone or download this repository.
+2. (Optional) Create and activate a virtual environment.
+3. Install dependencies:
+```bash
+python -m pip install python-dotenv requests matplotlib
 ```
-pip install canvas-downloader
-```
-
----
-
-## 1. Installation (local development version)
-
-1. Clone or download this repository:
-
-```
-git clone https://github.com/yourusername/canvas-downloader.git
-```
-
-2. Open the folder:
-
-```
-cd canvas-downloader
-```
-
-3. Install locally in “editable” mode:
-
-```
-pip install -e .
-```
-
-This makes the package importable and provides:
-
-```
+4. Run the app:
+```bash
 python -m canvas_downloader
 ```
 
----
-
-## 2. Get Your Canvas API Token
-
-Canvas requires an API token for external tools.
-
-Inside Canvas:
-
-1. Log into your university’s Canvas  
-2. Left sidebar → **Account**  
-3. Choose **Settings**  
-4. Scroll to **Approved Integrations** or **Access Tokens**  
-5. Click **+ New Access Token**  
-6. Give it a name  
-7. Click **Generate Token**  
-8. Copy the token (you will only see it once)
-
-Paste this into your `.env` file (see below).
-
----
-
-## 3. Create Your `.env` File
-
-Create a file named `.env` in the root folder:
-
-```env
-CANVAS_BASE_URL=https://youruniversity.instructure.com
-CANVAS_ACCESS_TOKEN=PASTE_TOKEN_HERE
-
-# Where downloaded files should be saved
-DOWNLOAD_ROOT=/path/to/folder
-
-# Enable ESE-specific block grouping
-FACULTY=
-GROUP_BY_BLOCKS=false
-
-UPDATE_ONLY=true
-
-# ESE-only: course mappings
-BLOK1=
-BLOK2=
-BLOK3=
-
-# Disable entire blocks (e.g. past blocks)
-DISABLE_BLOCKS=
-
-# Skip specific courses
-EXCLUDED=
-
-# Only download these specific courses (optional)
-ONLY_COURSES=
+**CLI Mode (no GUI)**
+```bash
+python -m canvas_downloader --cli
 ```
 
----
+**Canvas Access Token (summary)**
+In Canvas:
+1. Account -> Approved integrations
+2. New access token
+3. Enter a purpose and choose an expiration date
+4. Copy the token and paste it into the app
 
-## 4. For Erasmus School of Economics (ESE students only)
+The GUI includes step-by-step screenshots.
 
-To enable ESE block grouping:
+**Course Codes**
+Use course codes like `FEB22009` for Only/Exclude/BLOK settings. The GUI includes a screenshot showing where to find the course code in Canvas.
 
+**Download Destination Warning**
+Recommendation: avoid choosing a folder inside `Documents`. Some systems block write access there. Use something like `C:/Users/youruser/Downloads/Courses` instead.
+
+**ESE Block Grouping**
+ESE students can group courses by block:
 ```env
 FACULTY=ESE
 GROUP_BY_BLOCKS=true
 ```
-
-Fill the block mappings:
-
+Set block mappings using course codes:
 ```env
-BLOK1=COURSEID1, COURSEID2
-BLOK2=...
-BLOK3=...
+BLOK1=FEB22002X,FEB21011S
+BLOK2=FEB22008X,FEB21020X
 ```
-
-Disable past blocks:
-
+Disable entire blocks:
 ```env
 DISABLE_BLOCKS=BLOK1
 ```
 
----
+**Configuration (.env)**
+The GUI writes your settings to `.env`. You can also edit it manually if needed.
 
-## 5. Running the Downloader
-
-From the project root:
-
-```bash
-python -m canvas_downloader
+Example:
+```env
+CANVAS_BASE_URL=https://canvas.eur.nl/
+CANVAS_ACCESS_TOKEN=PASTE_TOKEN_HERE
+DOWNLOAD_ROOT=C:/Users/youruser/Downloads/Courses
+UPDATE_ONLY=true
+ONLY_COURSES=
+EXCLUDED=
+FACULTY=ESE
+GROUP_BY_BLOCKS=true
+BLOK1=FEB22002X,FEB21011S
+BLOK2=
+BLOK3=
+DISABLE_BLOCKS=
 ```
 
-This will:
-
-- Load `.env`
-- Fetch active courses
-- Skip blocks listed in `DISABLE_BLOCKS`
-- Skip courses in `EXCLUDED`
-- Apply whitelist if `ONLY_COURSES` is set
-- Download new files (if `UPDATE_ONLY=true`)
-
----
-
-## 6. Updating
-
-Just run the same command again:
-
+**Build a Windows .exe (for maintainers)**
 ```bash
-python -m canvas_downloader
+./build_exe.ps1
 ```
 
-Only new files will be downloaded if `UPDATE_ONLY=true`.
-
----
-
-## 7. Safety
-
-- Never commit `.env`  
-- Keep your Canvas token private  
-- Revoke your token immediately if exposed  
-
-A GUI setup wizard and PyPI release are planned for future versions.
-
-Happy downloading 📚
+**Safety**
+- Never commit `.env`.
+- Keep your token private and revoke it if exposed.

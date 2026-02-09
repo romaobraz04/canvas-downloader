@@ -12,6 +12,7 @@ __pycache__/
 venv/
 .env/
 .venv/
+.venv-student/
 
 # VSCode workspace settings (optional but recommended)
 .vscode/

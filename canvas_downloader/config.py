@@ -23,8 +23,9 @@ UPDATE_ONLY: bool = os.getenv("UPDATE_ONLY", "true").strip().lower() in {
     "1", "true", "yes", "y", "on",
 }
 
-if not CANVAS_BASE_URL or not CANVAS_ACCESS_TOKEN:
-    raise RuntimeError("Set CANVAS_BASE_URL and CANVAS_ACCESS_TOKEN in your .env file")
+def validate_canvas_config() -> None:
+    if not CANVAS_BASE_URL or not CANVAS_ACCESS_TOKEN:
+        raise RuntimeError("Set CANVAS_BASE_URL and CANVAS_ACCESS_TOKEN in your .env file")
 
 BLOCK_COURSES: Dict[str, Set[str]] = {}
 EXCLUDED_IDS: Set[str] = set()

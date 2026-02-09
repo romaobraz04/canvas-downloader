@@ -35,6 +35,7 @@ def sync(update_only: Optional[bool] = None) -> None:
     """
     if update_only is None:
         update_only = config.UPDATE_ONLY
+    config.validate_canvas_config()
     logger.debug("Starting sync (update_only=%s)", update_only)
     sync_all_courses(update_only=update_only)
 

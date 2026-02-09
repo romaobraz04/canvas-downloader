@@ -79,7 +79,9 @@ def guess_block_for_course(course: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def download_file(file_info: Dict[str, Any], dest_path: str, update_only: bool = True) -> None:
+def download_file(
+    file_info: Dict[str, Any], dest_path: str, update_only: bool = True
+) -> None:
     """
     Download a file from Canvas given its metadata.
 
@@ -122,7 +124,7 @@ def download_file(file_info: Dict[str, Any], dest_path: str, update_only: bool =
         logger.error("FileNotFoundError writing %s: %s", dest_path, e)
         return
 
-    time.sleep(0)  # be kind to the server
+    time.sleep(0.1)  # be kind to the server
 
 
 def sync_all_courses(update_only: bool = True) -> None:
@@ -140,7 +142,9 @@ def sync_all_courses(update_only: bool = True) -> None:
     logger.info("UPDATE_ONLY      = %s", update_only)
     logger.info("Fetching active courses from Canvas...")
 
-    courses = canvas_get("/api/v1/courses", params={"enrollment_state": "active", "per_page": 100})
+    courses = canvas_get(
+        "/api/v1/courses", params={"enrollment_state": "active", "per_page": 100}
+    )
     logger.info("Found %d courses", len(courses))
 
     for course in courses:
@@ -168,17 +172,22 @@ def sync_all_courses(update_only: bool = True) -> None:
 
         # If ONLY_COURSES is configured, skip anything not in the whitelist
         if config.ONLY_COURSES_IDS:
-            if (sis_id not in config.ONLY_COURSES_IDS) and (code not in config.ONLY_COURSES_IDS):
+            if (sis_id not in config.ONLY_COURSES_IDS) and (
+                code not in config.ONLY_COURSES_IDS
+            ):
                 logger.info("Skipping (not in ONLY_COURSES): %s", name)
                 continue
-
 
         # Decide root folder
         if config.GROUP_BY_BLOCKS and config.ESE_BLOCK_MODE:
             block = guess_block_for_course(course) or "Unknown_BLOK"
             # Skip entire disabled blocks
             if block in config.DISABLED_BLOCKS:
-                logger.info("Skipping course '%s' because its block (%s) is disabled", name, block)
+                logger.info(
+                    "Skipping course '%s' because its block (%s) is disabled",
+                    name,
+                    block,
+                )
                 continue
 
             logger.info("Using block %s for course %s", block, name)
@@ -187,9 +196,10 @@ def sync_all_courses(update_only: bool = True) -> None:
             # Either user disabled grouping, or faculty is not ESE
             course_root = os.path.join(config.DOWNLOAD_ROOT, course_name)
 
-
         # Fetch modules
-        modules = canvas_get(f"/api/v1/courses/{course_id}/modules", params={"per_page": 100})
+        modules = canvas_get(
+            f"/api/v1/courses/{course_id}/modules", params={"per_page": 100}
+        )
         logger.info("Course '%s' has %d modules", name, len(modules))
 
         for module in modules:
