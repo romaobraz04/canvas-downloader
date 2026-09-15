@@ -1,89 +1,83 @@
-# Canvas Course File Downloader
+# Canvas Downloader
 
-Download files from your Canvas courses into organized folders. Includes a GUI setup flow with screenshots and ESE-specific block grouping.
+A small personal web app that syncs files from active Erasmus University Rotterdam Canvas courses into folders on your computer.
 
-**Download (Windows)**
-Download the latest release here: [Latest Windows Release](../../releases/latest)
+This repository was refactored from the original Python/Tkinter desktop package into a static browser app plus one stateless Canvas proxy.
 
-**For non-technical users (recommended)**
-1. Go to the GitHub Releases page for this repo.
-2. Download `canvas-downloader-windows.zip`.
-3. Unzip it anywhere (e.g. Downloads).
-4. Double-click `canvas-downloader.exe`.
-5. Follow the on-screen setup wizard.
+## What it keeps from the desktop app
 
-**Quick Start (source)**
-1. Clone or download this repository.
-2. (Optional) Create and activate a virtual environment.
-3. Install dependencies:
+- Canvas access-token authentication
+- Active-course discovery
+- Select only the courses you want
+- Course → module → file folder structure
+- Update-only mode (skip files already present)
+- Optional ESE `BLOK1`–`BLOK5` grouping
+- Per-course block assignment
+- Ability to skip an entire block
+- Windows-safe folder/file names
+
+The old `ONLY_COURSES` and `EXCLUDED` text fields are replaced by a course checklist. It is the same behavior with less configuration.
+
+## Architecture
+
+- `web/` — dependency-free HTML/CSS/JavaScript app
+- `supabase/functions/canvas-proxy/` — stateless Supabase Edge Function that forwards only the Canvas endpoints this app needs
+- `.github/workflows/deploy-pages.yml` — deploys the static app to GitHub Pages
+
+The Canvas token is never stored in Supabase or a database. It is sent in an HTTPS request header only when the app needs to call Canvas. The browser can optionally remember the token in local storage if you explicitly enable **Remember token on this device**.
+
+## Browser support
+
+Direct folder sync uses the File System Access API. Use a current desktop Chromium browser such as Chrome or Edge.
+
+The user must explicitly choose a folder and grant write access. A normal website cannot silently write anywhere on the computer.
+
+## Local development
+
+Serve the `web` directory from localhost rather than opening `index.html` directly:
+
 ```bash
-python -m pip install python-dotenv requests matplotlib
-```
-4. Run the app:
-```bash
-python -m canvas_downloader
+python -m http.server 5173 --directory web
 ```
 
-**CLI Mode (no GUI)**
-```bash
-python -m canvas_downloader --cli
+Then open `http://localhost:5173`.
+
+The deployed proxy currently allows:
+
+- `https://romaobraz04.github.io`
+- `http://localhost:*`
+- `http://127.0.0.1:*`
+
+## Deployment
+
+### Frontend
+
+Push or merge to `main`. The GitHub Pages workflow uploads only `web/`.
+
+Expected project-site URL:
+
+```text
+https://romaobraz04.github.io/canvas-downloader/
 ```
 
-**Canvas Access Token (summary)**
-In Canvas:
-1. Account -> Approved integrations
-2. New access token
-3. Enter a purpose and choose an expiration date
-4. Copy the token and paste it into the app
+GitHub Pages may need to be enabled once in **Repository Settings → Pages → Source: GitHub Actions**.
 
-The GUI includes step-by-step screenshots.
+### Canvas proxy
 
-**Course Codes**
-Use course codes like `FEB22009` for Only/Exclude/BLOK settings. The GUI includes a screenshot showing where to find the course code in Canvas.
+The Edge Function source is versioned in this repo. Deploy `canvas-proxy` to the configured Supabase project.
 
-**Download Destination Warning**
-Recommendation: avoid choosing a folder inside `Documents`. Some systems block write access there. Use something like `C:/Users/youruser/Downloads/Courses` instead.
+The function:
 
-**ESE Block Grouping**
-ESE students can group courses by block:
-```env
-FACULTY=ESE
-GROUP_BY_BLOCKS=true
-```
-Set block mappings using course codes:
-```env
-BLOK1=FEB22002X,FEB21011S
-BLOK2=FEB22008X,FEB21020X
-```
-Disable entire blocks:
-```env
-DISABLE_BLOCKS=BLOK1
-```
+- accepts only this app's configured origins
+- accepts only the four Canvas GET endpoint shapes used by the downloader
+- accepts file downloads only from `https://canvas.eur.nl`
+- validates the Supabase publishable key
+- does not persist Canvas tokens or file contents
 
-**Configuration (.env)**
-The GUI writes your settings to `.env`. You can also edit it manually if needed.
+## Personal-use note
 
-Example:
-```env
-CANVAS_BASE_URL=https://canvas.eur.nl/
-CANVAS_ACCESS_TOKEN=PASTE_TOKEN_HERE
-DOWNLOAD_ROOT=C:/Users/youruser/Downloads/Courses
-UPDATE_ONLY=true
-ONLY_COURSES=
-EXCLUDED=
-FACULTY=ESE
-GROUP_BY_BLOCKS=true
-BLOK1=FEB22002X,FEB21011S
-BLOK2=
-BLOK3=
-DISABLE_BLOCKS=
-```
+Canvas documents manually generated access tokens as appropriate for testing/personal use; multi-user third-party applications should use Canvas OAuth with a registered Developer Key. Do not turn this into a public multi-user service without replacing manual token entry with OAuth.
 
-**Build a Windows .exe (for maintainers)**
-```bash
-./build_exe.ps1
-```
+## Legacy version
 
-**Safety**
-- Never commit `.env`.
-- Keep your token private and revoke it if exposed.
+The repository history still contains the previous Python/Tkinter implementation and Windows executable artifacts. They are intentionally removed from the web-app branch rather than carried forward.
