@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Canvas Downloader</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Personal Canvas utility</p>
+        <h1>Canvas Downloader</h1>
+        <p class="lede">Sync the files from your active Canvas courses into organized folders on your computer.</p>
+      </div>
+      <span class="status-pill" id="connectionStatus">Not connected</span>
+    </header>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <p class="step">1</p>
+          <div>
+            <h2>Connect to Canvas</h2>
+            <p>Your token is sent only to the Canvas proxy and is never stored on the server.</p>
+          </div>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Canvas</span>
+        <input value="https://canvas.eur.nl" disabled>
+      </label>
+
+      <label class="field">
+        <span>Access token</span>
+        <div class="input-with-button">
+          <input id="tokenInput" type="password" autocomplete="off" placeholder="Paste your Canvas access token">
+          <button class="ghost compact" type="button" id="toggleToken">Show</button>
+        </div>
+      </label>
+
+      <label class="check-row">
+        <input id="rememberToken" type="checkbox">
+        <span>Remember token on this device</span>
+      </label>
+
+      <details class="help">
+        <summary>How do I create a token?</summary>
+        <ol>
+          <li>Open Canvas and go to <strong>Account → Settings</strong>.</li>
+          <li>Find <strong>Approved Integrations</strong> and create a new access token.</li>
+          <li>Give it a purpose, set an expiry date, then copy the token here.</li>
+        </ol>
+      </details>
+
+      <div class="actions">
+        <button class="primary" type="button" id="connectButton">Load my courses</button>
+      </div>
+    </section>
+
+    <section class="card hidden" id="coursesSection">
+      <div class="section-heading">
+        <div>
+          <p class="step">2</p>
+          <div>
+            <h2>Choose courses</h2>
+            <p>Active courses are selected by default. Change the selection whenever you want.</p>
+          </div>
+        </div>
+        <div class="mini-actions">
+          <button class="ghost compact" type="button" id="selectAllButton">Select all</button>
+          <button class="ghost compact" type="button" id="clearAllButton">Clear</button>
+        </div>
+      </div>
+      <div id="courseList" class="course-list"></div>
+    </section>
+
+    <section class="card hidden" id="optionsSection">
+      <div class="section-heading">
+        <div>
+          <p class="step">3</p>
+          <div>
+            <h2>Organize the download</h2>
+            <p>These match the useful options from the desktop app, without the .env file.</p>
+          </div>
+        </div>
+      </div>
+
+      <label class="check-row">
+        <input id="updateOnly" type="checkbox" checked>
+        <span>
+          <strong>Update only</strong>
+          <small>Skip files that already exist in the destination.</small>
+        </span>
+      </label>
+
+      <label class="check-row">
+        <input id="groupByBlocks" type="checkbox">
+        <span>
+          <strong>Group ESE courses by BLOK</strong>
+          <small>Creates BLOK1, BLOK2, etc. above the course folders.</small>
+        </span>
+      </label>
+
+      <div class="block-panel hidden" id="blockPanel">
+        <p class="muted">Assign each course to a block. Assignments are remembered in this browser.</p>
+        <div id="blockAssignments" class="block-assignments"></div>
+        <fieldset class="skip-blocks">
+          <legend>Skip entire blocks</legend>
+          <div id="skipBlocks"></div>
+        </fieldset>
+      </div>
+    </section>
+
+    <section class="card hidden" id="destinationSection">
+      <div class="section-heading">
+        <div>
+          <p class="step">4</p>
+          <div>
+            <h2>Choose a folder and sync</h2>
+            <p>The browser needs permission to write into a folder you choose.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="destination-row">
+        <button class="secondary" type="button" id="chooseFolderButton">Choose folder</button>
+        <span id="folderName" class="muted">No folder selected</span>
+      </div>
+
+      <div class="browser-warning hidden" id="browserWarning">
+        Direct folder sync needs a desktop browser that supports the File System Access API, such as current Chrome or Edge.
+      </div>
+
+      <div class="actions">
+        <button class="primary" type="button" id="syncButton" disabled>Sync selected courses</button>
+      </div>
+
+      <div class="progress hidden" id="progressPanel">
+        <div class="progress-head">
+          <strong id="progressLabel">Preparing…</strong>
+          <span id="progressStats"></span>
+        </div>
+        <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+      </div>
+
+      <details class="log-wrap" open>
+        <summary>Activity</summary>
+        <pre id="activityLog" class="log">Ready.</pre>
+      </details>
+    </section>
+
+    <footer>
+      Personal-use tool for Erasmus University Rotterdam. Canvas tokens are password-equivalent; keep yours private.
+    </footer>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
