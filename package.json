@@ -1,0 +1,16 @@
+{
+  "name": "canvas-downloader",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A small personal web utility that streams EUR Canvas course files into local folders.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "node --test",
+    "check": "node --check worker/index.js && node --check web/app.js && wrangler deploy --dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.131.2"
+  }
+}
