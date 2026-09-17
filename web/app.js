@@ -1,13 +1,14 @@
-const SUPABASE_FUNCTION_URL = "https://oixhuaaktwwzhcboueqj.supabase.co/functions/v1/canvas-proxy";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_pMsOLWD4Ak-2niQl-kBa5g_y_QLpcIs";
-const SETTINGS_KEY = "canvas-downloader.settings.v2";
+const SETTINGS_KEY = "canvas-downloader.settings.v3";
 const TOKEN_KEY = "canvas-downloader.token";
 const BLOCKS = ["BLOK1", "BLOK2", "BLOK3", "BLOK4", "BLOK5"];
 const BLOCK_OPTIONS = [...BLOCKS, "Unknown_BLOK"];
+const MAX_SAFE_NAME_LENGTH = 180;
+const WINDOWS_RESERVED_NAME = /^(?:CON|PRN|AUX|NUL|CLOCK\$|COM[1-9\u00B9\u00B2\u00B3]|LPT[1-9\u00B9\u00B2\u00B3])$/i;
 
 const el = {
   token: document.querySelector("#tokenInput"), rememberToken: document.querySelector("#rememberToken"),
   toggleToken: document.querySelector("#toggleToken"), connect: document.querySelector("#connectButton"),
+  connectionMessage: document.querySelector("#connectionMessage"),
   connectionStatus: document.querySelector("#connectionStatus"), coursesSection: document.querySelector("#coursesSection"),
   courseList: document.querySelector("#courseList"), selectAll: document.querySelector("#selectAllButton"),
   clearAll: document.querySelector("#clearAllButton"), optionsSection: document.querySelector("#optionsSection"),
@@ -22,6 +23,7 @@ const el = {
 };
 
 let courses = [];
+let coursesLoaded = false;
 let directoryHandle = null;
 let syncing = false;
 const state = loadSettings();
@@ -38,17 +40,47 @@ function loadSettings() {
 function saveSettings() {
   state.updateOnly = el.updateOnly.checked;
   state.groupByBlocks = el.groupByBlocks.checked;
-  state.selectedCourses = courses.filter((course) => course.selected).map(courseKey);
+  if (coursesLoaded) state.selectedCourses = courses.filter((course) => course.selected).map(courseKey);
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state));
   if (el.rememberToken.checked) localStorage.setItem(TOKEN_KEY, el.token.value.trim());
   else localStorage.removeItem(TOKEN_KEY);
 }
 
-function courseKey(course) { return String(course.course_code || course.sis_course_id || course.id); }
+function courseKey(course) { return String(course.id); }
+function courseCode(course) { return String(course.course_code || course.sis_course_id || `ID ${course.id}`); }
 function courseLabel(course) { return course.name || course.course_code || `Course ${course.id}`; }
+function takeCodeUnits(value, length) {
+  let result = "";
+  for (const character of value) {
+    if (result.length + character.length > length) break;
+    result += character;
+  }
+  return result;
+}
+function nameHash(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
 function safeName(value) {
   if (!value) return "untitled";
-  return String(value).replace(/[<>:"/\\|?*\u0000-\u001F]/g, "").replace(/\p{C}/gu, "").replace(/\p{So}/gu, "").trim().replace(/[. ]+$/g, "") || "untitled";
+  let cleaned = String(value).replace(/[<>:"/\\|?*\u0000-\u001F]/g, "").replace(/\p{C}/gu, "").replace(/\p{So}/gu, "").trim().replace(/[. ]+$/g, "");
+  if (!cleaned) return "untitled";
+
+  const firstPart = cleaned.split(".", 1)[0];
+  if (WINDOWS_RESERVED_NAME.test(firstPart)) cleaned = `_${cleaned}`;
+  if (cleaned.length <= MAX_SAFE_NAME_LENGTH) return cleaned;
+
+  const extensionIndex = cleaned.lastIndexOf(".");
+  const candidateExtension = extensionIndex > 0 ? cleaned.slice(extensionIndex) : "";
+  const extension = candidateExtension.length < MAX_SAFE_NAME_LENGTH / 2 ? candidateExtension : "";
+  const base = extension ? cleaned.slice(0, extensionIndex) : cleaned;
+  const suffix = `~${nameHash(cleaned)}`;
+  const truncated = takeCodeUnits(base, MAX_SAFE_NAME_LENGTH - extension.length - suffix.length).replace(/[. ]+$/g, "");
+  return `${truncated || "untitled"}${suffix}${extension}`;
 }
 function guessBlock(course) {
   const key = courseKey(course);
@@ -68,25 +100,40 @@ function setConnected(connected) {
 }
 function token() { return el.token.value.trim(); }
 
-async function proxyRequest(payload, responseType = "json") {
+async function proxyRequest(path, responseType = "json") {
   if (!token()) throw new Error("Paste your Canvas access token first.");
-  const response = await fetch(SUPABASE_FUNCTION_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY, "X-Canvas-Token": token() },
-    body: JSON.stringify(payload),
+  const response = await fetch(path, {
+    method: "GET",
+    headers: { "X-Canvas-Token": token() },
+    cache: "no-store",
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
   });
   if (!response.ok) {
-    let detail = "";
-    try { const body = await response.json(); detail = body.error || body.message || ""; }
-    catch { detail = await response.text(); }
+    const responseText = await response.text();
+    let detail = responseText.trim();
+    try {
+      const body = JSON.parse(responseText);
+      detail = body?.error || body?.message || detail;
+    } catch {}
     throw new Error(detail || `Request failed (${response.status})`);
   }
   if (responseType === "response") return response;
   return response.json();
 }
 
-function canvasGet(path, params = {}) { return proxyRequest({ action: "api", path, params }); }
-function downloadResponse(url) { return proxyRequest({ action: "file", url }, "response"); }
+function canvasId(value, label) {
+  const id = String(value ?? "");
+  if (!/^\d+$/.test(id)) throw new Error(`Canvas returned an invalid ${label} ID.`);
+  return id;
+}
+function getCourses() { return proxyRequest("/api/courses"); }
+function getModules(courseId) { return proxyRequest(`/api/courses/${canvasId(courseId, "course")}/modules`); }
+function getModuleItems(courseId, moduleId) {
+  return proxyRequest(`/api/courses/${canvasId(courseId, "course")}/modules/${canvasId(moduleId, "module")}/items`);
+}
+function getFileInfo(fileId) { return proxyRequest(`/api/files/${canvasId(fileId, "file")}`); }
+function downloadResponse(fileId) { return proxyRequest(`/api/files/${canvasId(fileId, "file")}/download`, "response"); }
 
 function renderCourses() {
   el.courseList.replaceChildren();
@@ -96,7 +143,7 @@ function renderCourses() {
     checkbox.addEventListener("change", () => { course.selected = checkbox.checked; renderBlockAssignments(); saveSettings(); });
     const main = document.createElement("span"); main.className = "course-main";
     const name = document.createElement("span"); name.className = "course-name"; name.textContent = courseLabel(course);
-    const code = document.createElement("span"); code.className = "course-code"; code.textContent = courseKey(course);
+    const code = document.createElement("span"); code.className = "course-code"; code.textContent = courseCode(course);
     main.append(name, code);
     const select = createBlockSelect(course); select.classList.add("course-block-select"); select.classList.toggle("hidden", !el.groupByBlocks.checked);
     row.append(checkbox, main, select); el.courseList.append(row);
@@ -121,7 +168,7 @@ function renderBlockAssignments() {
   el.blockAssignments.replaceChildren();
   for (const course of courses.filter((item) => item.selected)) {
     const row = document.createElement("div"); row.className = "block-assignment";
-    const label = document.createElement("span"); label.className = "course-name"; label.textContent = `${courseLabel(course)} · ${courseKey(course)}`;
+    const label = document.createElement("span"); label.className = "course-name"; label.textContent = `${courseLabel(course)} · ${courseCode(course)}`;
     row.append(label, createBlockSelect(course)); el.blockAssignments.append(row);
   }
   if (!el.blockAssignments.childElementCount) { const empty = document.createElement("p"); empty.className = "muted"; empty.textContent = "Select at least one course."; el.blockAssignments.append(empty); }
@@ -138,17 +185,27 @@ function renderSkipBlocks() {
 }
 
 async function connect() {
-  if (!token()) { log("A Canvas token is required."); el.token.focus(); return; }
+  el.connectionMessage.classList.add("hidden");
+  if (!token()) {
+    el.connectionMessage.textContent = "Paste your Canvas access token first.";
+    el.connectionMessage.classList.remove("hidden");
+    el.token.focus(); return;
+  }
   el.connect.disabled = true; el.connect.textContent = "Loading…"; setConnected(false);
   try {
     log("Loading active Canvas courses…");
-    const result = await canvasGet("/api/v1/courses", { enrollment_state: "active", per_page: 100 });
+    const result = await getCourses();
     const remembered = Array.isArray(state.selectedCourses) ? new Set(state.selectedCourses) : null;
     courses = result.filter((course) => course && course.id).sort((a, b) => courseLabel(a).localeCompare(courseLabel(b))).map((course) => ({ ...course, selected: remembered ? remembered.has(courseKey(course)) : true }));
+    coursesLoaded = true;
     renderCourses(); renderSkipBlocks();
     el.coursesSection.classList.remove("hidden"); el.optionsSection.classList.remove("hidden"); el.destinationSection.classList.remove("hidden");
     setConnected(true); saveSettings(); log(`Loaded ${courses.length} active course${courses.length === 1 ? "" : "s"}.`);
-  } catch (error) { log(`Connection failed: ${error.message}`); setConnected(false); }
+  } catch (error) {
+    log(`Connection failed: ${error.message}`); setConnected(false);
+    el.connectionMessage.textContent = `Connection failed: ${error.message}`;
+    el.connectionMessage.classList.remove("hidden");
+  }
   finally { el.connect.disabled = false; el.connect.textContent = "Load my courses"; }
 }
 
@@ -172,10 +229,17 @@ async function fileExists(parent, name) {
   catch (error) { if (error?.name === "NotFoundError") return false; throw error; }
 }
 async function writeDownload(parent, name, response) {
-  const fileHandle = await parent.getFileHandle(name, { create: true });
-  const writable = await fileHandle.createWritable();
-  if (!response.body) { await writable.abort(); throw new Error("The download response had no file data."); }
-  await response.body.pipeTo(writable);
+  if (!response.body) throw new Error("The download response had no file data.");
+  const existed = await fileExists(parent, name);
+  try {
+    const fileHandle = await parent.getFileHandle(name, { create: true });
+    const writable = await fileHandle.createWritable();
+    await response.body.pipeTo(writable);
+  } catch (error) {
+    await response.body.cancel().catch(() => {});
+    if (!existed) await parent.removeEntry(name).catch(() => {});
+    throw error;
+  }
 }
 function selectedCoursesForSync() {
   return courses.filter((course) => course.selected && (!el.groupByBlocks.checked || !state.skippedBlocks.includes(guessBlock(course))));
@@ -188,12 +252,14 @@ function setProgress(label, done, total, stats) {
 async function sync() {
   if (syncing) return;
   if (!directoryHandle) { log("Choose a destination folder first."); return; }
-  if (!(await ensurePermission(directoryHandle))) { log("Folder write permission was not granted."); return; }
   const selected = selectedCoursesForSync();
   if (!selected.length) { log("No courses are selected for sync."); return; }
-  saveSettings(); syncing = true; el.sync.disabled = true; el.chooseFolder.disabled = true; el.connect.disabled = true;
+  saveSettings(); syncing = true;
+  const enabledControls = [...document.querySelectorAll("input, select, button")].filter((control) => !control.disabled);
+  enabledControls.forEach((control) => { control.disabled = true; });
   let downloaded = 0, skipped = 0, errors = 0, filesSeen = 0;
   try {
+    if (!(await ensurePermission(directoryHandle))) { log("Folder write permission was not granted."); return; }
     log(`Starting sync for ${selected.length} course${selected.length === 1 ? "" : "s"}…`);
     for (let courseIndex = 0; courseIndex < selected.length; courseIndex += 1) {
       const course = selected[courseIndex]; const label = courseLabel(course);
@@ -202,21 +268,19 @@ async function sync() {
         let parent = directoryHandle;
         if (el.groupByBlocks.checked) parent = await getDirectory(parent, guessBlock(course));
         const courseDir = await getDirectory(parent, label);
-        const modules = await canvasGet(`/api/v1/courses/${course.id}/modules`, { per_page: 100 });
+        const modules = await getModules(course.id);
         log(`${label}: ${modules.length} module${modules.length === 1 ? "" : "s"}.`);
         for (const module of modules) {
           const moduleDir = await getDirectory(courseDir, module.name || `Module_${module.id}`);
-          const items = await canvasGet(`/api/v1/courses/${course.id}/modules/${module.id}/items`, { per_page: 100 });
+          const items = await getModuleItems(course.id, module.id);
           for (const item of items) {
             if (item.type !== "File" || !item.content_id) continue;
             filesSeen += 1;
             try {
-              const info = await canvasGet(`/api/v1/files/${item.content_id}`);
+              const info = await getFileInfo(item.content_id);
               const filename = safeName(info.display_name || info.filename || `file_${item.content_id}`);
               if (el.updateOnly.checked && (await fileExists(moduleDir, filename))) { skipped += 1; log(`Skipped existing: ${label} / ${module.name || "Module"} / ${filename}`); continue; }
-              const url = info.url || info.download_url;
-              if (!url) throw new Error("Canvas did not provide a download URL.");
-              const response = await downloadResponse(url); await writeDownload(moduleDir, filename, response);
+              const response = await downloadResponse(item.content_id); await writeDownload(moduleDir, filename, response);
               downloaded += 1; log(`Downloaded: ${label} / ${module.name || "Module"} / ${filename}`);
             } catch (error) { errors += 1; log(`File error in ${label}: ${error.message}`); }
           }
@@ -225,7 +289,8 @@ async function sync() {
     }
     setProgress(errors ? "Sync finished with errors" : "Sync complete", selected.length, selected.length, `${downloaded} downloaded · ${skipped} skipped · ${errors} errors`);
     log(`Finished. ${filesSeen} file item${filesSeen === 1 ? "" : "s"} checked.`);
-  } finally { syncing = false; el.sync.disabled = false; el.chooseFolder.disabled = false; el.connect.disabled = false; }
+  } catch (error) { log(`Sync failed: ${error.message}`); }
+  finally { syncing = false; enabledControls.forEach((control) => { control.disabled = false; }); }
 }
 
 function init() {
